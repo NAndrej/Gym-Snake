@@ -18,6 +18,7 @@ class Controller():
         self.grid = Grid(grid_size, unit_size, unit_gap)
 
         self.snakes = []
+        self.foods = []
         self.dead_snakes = []
         for i in range(1,n_snakes+1):
             start_coord = [i*grid_size[0]//(n_snakes+1), snake_size+1]
@@ -33,7 +34,7 @@ class Controller():
                 self.grid.place_food(start_coord)
         else:
             for i in range(n_foods):
-                self.grid.new_food()
+                self.foods.append(self.grid.new_food())
 
     def move_snake(self, direction, snake_idx):
         """
@@ -76,7 +77,7 @@ class Controller():
             self.grid.connect(snake.body[0], snake.body[1], self.grid.BODY_COLOR)
             self.grid.cover(snake.head, snake.head_color) # Avoid miscount of grid.open_space
             reward = 1
-            self.grid.new_food()
+            self.foods[snake_idx] = self.grid.new_food()
         else:
             reward = 0
             empty_coord = snake.body.popleft()
@@ -109,9 +110,9 @@ class Controller():
         # Ensure no more play until reset
         if self.snakes_remaining < 1 or self.grid.open_space < 1:
             if type(directions) == type(int()) or len(directions) == 1:
-                return self.grid.grid.copy(), 0, True, {"snakes_remaining":self.snakes_remaining}
+                return self.get_state(0), 0, True, {"snakes_remaining":self.snakes_remaining}
             else:
-                return self.grid.grid.copy(), [0]*len(directions), True, {"snakes_remaining":self.snakes_remaining}
+                return self.get_state(0), [0]*len(directions), True, {"snakes_remaining":self.snakes_remaining}
 
         rewards = []
 
@@ -126,6 +127,26 @@ class Controller():
 
         done = self.snakes_remaining < 1 or self.grid.open_space < 1
         if len(rewards) == 1:
-            return self.grid.grid.copy(), rewards[0], done, {"snakes_remaining":self.snakes_remaining}
+            return self.get_state(0), rewards[0], done, {"snakes_remaining":self.snakes_remaining}
         else:
-            return self.grid.grid.copy(), rewards, done, {"snakes_remaining":self.snakes_remaining}
+            return self.get_state(0), rewards, done, {"snakes_remaining":self.snakes_remaining}
+    
+    def get_state(self, snake_idx):
+        food = self.foods[snake_idx]
+        snake = self.snakes[snake_idx]
+
+        if not snake:
+            return []
+
+        next_to_right_wall = snake.head[0] + 1 == self.grid.grid_size[0]
+        next_to_left_wall = snake.head[0] - 1 == 0
+        next_to_top_wall = snake.head[1] - 1 == 0
+        next_to_bottom_wall = snake.head[1] + 1 == self.grid.grid_size[1]
+
+        apple_up = snake.head[1] > food[1]
+        apple_bottom = food[1] > snake.head[1] 
+        apple_right = food[0] > snake.head[0]
+        apple_left = snake.head[0] > food[0]
+
+        return next_to_top_wall, next_to_bottom_wall, next_to_left_wall, next_to_right_wall, apple_up, apple_bottom, apple_left, apple_right
+        # exit()

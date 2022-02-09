@@ -13,7 +13,7 @@ except ImportError as e:
 class SnakeEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, grid_size=[15,15], unit_size=10, unit_gap=1, snake_size=3, n_snakes=1, n_foods=1, random_init=True):
+    def __init__(self, grid_size=[10,10], unit_size=10, unit_gap=1, snake_size=3, n_snakes=1, n_foods=1, random_init=True):
         self.grid_size = grid_size
         self.unit_size = unit_size
         self.unit_gap = unit_gap
@@ -41,7 +41,7 @@ class SnakeEnv(gym.Env):
             self.fig.show()
         else:
             self.viewer.clear()
-            self.viewer.imshow(self.last_obs)
+            self.viewer.imshow(self.controller.grid.grid.copy())
             plt.pause(frame_speed)
         self.fig.canvas.draw()
 
