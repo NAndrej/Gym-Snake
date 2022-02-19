@@ -1,6 +1,7 @@
 from gym_snake.envs.snake import Snake
 from gym_snake.envs.snake import Grid
 import numpy as np
+import math
 
 class Controller():
     """
@@ -20,6 +21,8 @@ class Controller():
         self.snakes = []
         self.foods = []
         self.dead_snakes = []
+        self.previous_head_position = None
+        self.current_state = []
         for i in range(1,n_snakes+1):
             start_coord = [i*grid_size[0]//(n_snakes+1), snake_size+1]
             self.snakes.append(Snake(start_coord, snake_size))
@@ -52,6 +55,7 @@ class Controller():
         # Erase tail without popping so as to redraw if food eaten
         self.grid.erase(snake.body[0])
         # Find and set next head position conditioned on direction
+        self.previous_head_position = snake.head
         snake.action(direction)
 
     def move_result(self, direction, snake_idx=0):
@@ -59,7 +63,6 @@ class Controller():
         Checks for food and death collisions after moving snake. Draws head of snake if
         no death scenarios.
         """
-
         snake = self.snakes[snake_idx]
         if type(snake) == type(None):
             return 0
@@ -67,26 +70,47 @@ class Controller():
         # Check for death of snake
         if self.grid.check_death(snake.head):
             self.dead_snakes[snake_idx] = self.snakes[snake_idx]
+            self.current_state = self.get_state()
             self.snakes[snake_idx] = None
             self.grid.cover(snake.head, snake.head_color) # Avoid miscount of grid.open_space
             self.grid.connect(snake.body.popleft(), snake.body[0], self.grid.SPACE_COLOR)
-            reward = -1
+            reward = -100
+
+            self.grid.connect(snake.body[-1], snake.head, self.grid.BODY_COLOR)
+            return reward
         # Check for reward
         elif self.grid.food_space(snake.head):
             self.grid.draw(snake.body[0], self.grid.BODY_COLOR) # Redraw tail
             self.grid.connect(snake.body[0], snake.body[1], self.grid.BODY_COLOR)
             self.grid.cover(snake.head, snake.head_color) # Avoid miscount of grid.open_space
-            reward = 1
+            reward = 10
             self.foods[snake_idx] = self.grid.new_food()
+
+            self.grid.connect(snake.body[-1], snake.head, self.grid.BODY_COLOR)
+            return reward
         else:
             reward = 0
             empty_coord = snake.body.popleft()
             self.grid.connect(empty_coord, snake.body[0], self.grid.SPACE_COLOR)
-            self.grid.draw(snake.head, snake.head_color)
+            self.grid.draw(snake.head, snake. head_color)
 
         self.grid.connect(snake.body[-1], snake.head, self.grid.BODY_COLOR)
-
+        
+        if self.getting_closer():
+            reward = 1
+        else:
+            reward = -1
+            
         return reward
+    
+    def getting_closer(self):
+        food_position = self.foods[0]
+        current_position = self.snakes[0].head
+
+        previous_distance = math.hypot(self.previous_head_position[0] - food_position[0], self.previous_head_position[1] - food_position[1])
+        current_distance = math.hypot(current_position[0] - food_position[0], current_position[1] - food_position[1])
+
+        return previous_distance > current_distance
 
     def kill_snake(self, snake_idx):
         """
@@ -94,6 +118,7 @@ class Controller():
         """
         
         assert self.dead_snakes[snake_idx] is not None
+
         self.grid.erase(self.dead_snakes[snake_idx].head)
         self.grid.erase_snake_body(self.dead_snakes[snake_idx])
         self.dead_snakes[snake_idx] = None
@@ -110,9 +135,9 @@ class Controller():
         # Ensure no more play until reset
         if self.snakes_remaining < 1 or self.grid.open_space < 1:
             if type(directions) == type(int()) or len(directions) == 1:
-                return self.grid.grid.copy(), 0, True, {"snakes_remaining":self.snakes_remaining}
+                return self.get_state(), 0, True, {"snakes_remaining":self.snakes_remaining}
             else:
-                return self.grid.grid.copy(), [0]*len(directions), True, {"snakes_remaining":self.snakes_remaining}
+                return self.get_state(), [0]*len(directions), True, {"snakes_remaining":self.snakes_remaining}
 
         rewards = []
 
@@ -127,26 +152,30 @@ class Controller():
 
         done = self.snakes_remaining < 1 or self.grid.open_space < 1
         if len(rewards) == 1:
-            return self.grid.grid.copy(), rewards[0], done, {"snakes_remaining":self.snakes_remaining}
+            return self.get_state(), rewards[0], done, {"snakes_remaining":self.snakes_remaining}
         else:
-            return self.grid.grid.copy(), rewards, done, {"snakes_remaining":self.snakes_remaining}
+            return self.get_state(), rewards, done, {"snakes_remaining":self.snakes_remaining}
     
-    def get_state(self, snake_idx):
-        food = self.foods[snake_idx]
-        snake = self.snakes[snake_idx]
+    def get_state(self):
+        if not self.snakes[0]:
+            return np.array(self.current_state)
 
-        if not snake:
-            return []
+        food_position = self.foods[0]
+        current_position = self.snakes[0].head
 
-        next_to_right_wall = snake.head[0] + 1 == self.grid.grid_size[0]
-        next_to_left_wall = snake.head[0] - 1 == 0
-        next_to_top_wall = snake.head[1] - 1 == 0
-        next_to_bottom_wall = snake.head[1] + 1 == self.grid.grid_size[1]
+        next_to_right_wall = current_position[0] + 1 == self.grid.grid_size[0]
+        next_to_left_wall = current_position[0] - 1 == 0
+        next_to_top_wall = current_position[1] - 1 == 0
+        next_to_bottom_wall = current_position[1] + 1 == self.grid.grid_size[1]
 
-        apple_up = snake.head[1] > food[1]
-        apple_bottom = food[1] > snake.head[1] 
-        apple_right = food[0] > snake.head[0]
-        apple_left = snake.head[0] > food[0]
+        apple_up = current_position[1] > food_position[1]
+        apple_bottom = food_position[1] > current_position[1] 
+        apple_right = food_position[0] > current_position[0]
+        apple_left = current_position[0] > food_position[0]
 
-        return next_to_top_wall, next_to_bottom_wall, next_to_left_wall, next_to_right_wall, apple_up, apple_bottom, apple_left, apple_right
+        apple_position = math.atan2(food_position[1] - current_position[1], food_position[0] - current_position[1]) / math.pi + 0.5
+
+        # return np.array([next_to_top_wall, next_to_bottom_wall, next_to_left_wall, next_to_right_wall, apple_position])
+        return np.array([next_to_top_wall, next_to_bottom_wall, next_to_left_wall, next_to_right_wall, apple_up, apple_left, apple_bottom, apple_right])
+
         # exit()

@@ -41,7 +41,7 @@ class SnakeEnv(gym.Env):
             self.fig.show()
         else:
             self.viewer.clear()
-            self.viewer.imshow(self.last_obs)
+            self.viewer.imshow(self.controller.grid.grid.copy())
             plt.pause(frame_speed)
         self.fig.canvas.draw()
 
